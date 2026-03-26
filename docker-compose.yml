@@ -22,6 +22,21 @@ services:
       retries: 10
       start_period: 5s
 
+  vault:
+    image: hashicorp/vault:1.21
+    container_name: catdog-vault
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
+    command: ["vault", "server", "-config=/vault/config/vault.hcl"]
+    ports:
+      - "8200:8200"
+    volumes:
+      - vault_file:/vault/file
+      - ./vault/vault.hcl:/vault/config/vault.hcl:ro
+    environment:
+      VAULT_ADDR: http://127.0.0.1:8200
+
   web:
     build:
       context: .
@@ -52,6 +67,7 @@ services:
 
 volumes:
   redis_data:
+  vault_file:
 
 secrets:
   redis_host:
