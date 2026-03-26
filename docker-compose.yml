@@ -1,0 +1,68 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: catdog-redis
+    restart: unless-stopped
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    volumes:
+      - redis_data:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    secrets:
+      - redis_username
+      - redis_password
+      - redis_users_acl
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "redis-cli --user \"$$(cat /run/secrets/redis_username)\" --pass \"$$(cat /run/secrets/redis_password)\" ping | grep PONG"
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${IMAGE:-akp1n/catdog-api:latest}
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8001}:8000"
+    command: ["./entrypoint.sh"]
+    environment:
+      REDIS_HOST_FILE: /run/secrets/redis_host
+      REDIS_PORT_FILE: /run/secrets/redis_port
+      REDIS_DB_FILE: /run/secrets/redis_db
+      REDIS_USERNAME_FILE: /run/secrets/redis_username
+      REDIS_PASSWORD_FILE: /run/secrets/redis_password
+      MODEL_VERSION: ${MODEL_VERSION:-1.0.0}
+      MODEL_DEVICE: ${MODEL_DEVICE:-cpu}
+      CLASSIFIER_KEY: ${CLASSIFIER_KEY:-LOG_REG}
+    secrets:
+      - redis_host
+      - redis_port
+      - redis_db
+      - redis_username
+      - redis_password
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  redis_data:
+
+secrets:
+  redis_host:
+    file: ./secrets/redis_host.txt
+  redis_port:
+    file: ./secrets/redis_port.txt
+  redis_db:
+    file: ./secrets/redis_db.txt
+  redis_username:
+    file: ./secrets/redis_username.txt
+  redis_password:
+    file: ./secrets/redis_password.txt
+  redis_users_acl:
+    file: ./secrets/redis_users.acl
