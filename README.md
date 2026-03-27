@@ -309,21 +309,102 @@ http://localhost:8001
 
 ---
 
+# Redis Setup
+
+The project uses **Redis** to store prediction history.  
+Each prediction is saved in Redis and can later be retrieved threw API endpoint:
+
+```text
+GET /predictions?limit=N
+```
+
+To run redis locally create the following files:
+
+`secrets/redis_host.txt`
+```text
+redis
+```
+
+### `secrets/redis_port.txt`
+
+```text
+6379
+```
+
+### `secrets/redis_db.txt`
+
+```text
+0
+```
+
+### `secrets/redis_username.txt`
+
+```text
+model_writer
+```
+
+### `secrets/redis_password.txt`
+
+```text
+strong_password
+```
+
+### `secrets/redis_users.acl`
+
+```text
+user default off
+user model_writer on >strong_password ~prediction:* ~predictions:* +ping +hset +hgetall +zadd +zrevrange +multi +exec +select +client
+```
+
+## Redis server config
+
+Create file `redis/redis.conf`:
+
+```conf
+aclfile /run/secrets/redis_users_acl
+appendonly yes
+```
+---
+
+## Vault setup
+
+Create file `redis/redis.conf`:
+
+```conf
+aclfile /run/secrets/redis_users_acl
+appendonly yes
+```
+---
+
+
 # Docker Compose
 
-Start service:
+To run the service you need to complete next steps:
 
+Firstly build docker image 
 ```bash
-docker compose up --build
+docker compose build --progress=plain
+```
+Start vault and redis
+```bash
+docker compose up -d vault redis
 ```
 
-Run in background:
-
+Then make bootstrap script executable
 ```bash
-docker compose up -d --build
+chmod +x scripts/bootstrap_vault.sh
+```
+Run bootstrap script
+```bash
+./scripts/bootstrap_vault.sh
+```
+Then up the Web service:
+```bash
+docker compose up -d web
 ```
 
-Stop service:
+
+To stop service:
 
 ```bash
 docker compose down
@@ -424,6 +505,7 @@ Example metrics on validation set:
 | Accuracy  | 0.96  |
 
 ---
+
 
 # Author
 

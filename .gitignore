@@ -139,3 +139,6 @@ secrets/
 
 # mac os file
 *.DS_Store
+
+# vault
+.vault-local/
