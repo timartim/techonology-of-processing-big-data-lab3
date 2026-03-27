@@ -22,6 +22,21 @@ services:
       retries: 10
       start_period: 5s
 
+  vault:
+    image: hashicorp/vault:1.21
+    container_name: catdog-vault
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
+    command: ["vault", "server", "-config=/vault/config/vault.hcl"]
+    ports:
+      - "8200:8200"
+    volumes:
+      - vault_file:/vault/file
+      - ./vault/vault.hcl:/vault/config/vault.hcl:ro
+    environment:
+      VAULT_ADDR: http://127.0.0.1:8200
+
   web:
     build:
       context: .
@@ -32,26 +47,23 @@ services:
       - "${APP_PORT:-8001}:8000"
     command: ["./entrypoint.sh"]
     environment:
-      REDIS_HOST_FILE: /run/secrets/redis_host
-      REDIS_PORT_FILE: /run/secrets/redis_port
-      REDIS_DB_FILE: /run/secrets/redis_db
-      REDIS_USERNAME_FILE: /run/secrets/redis_username
-      REDIS_PASSWORD_FILE: /run/secrets/redis_password
+      VAULT_ADDR: http://vault:8200
+      VAULT_ROLE_ID_FILE: /vault-bootstrap/role_id
+      VAULT_SECRET_ID_FILE: /vault-bootstrap/secret_id
+      VAULT_KV_MOUNT: app
+      VAULT_SECRET_PATH: catdog/redis
       MODEL_VERSION: ${MODEL_VERSION:-1.0.0}
       MODEL_DEVICE: ${MODEL_DEVICE:-cpu}
       CLASSIFIER_KEY: ${CLASSIFIER_KEY:-LOG_REG}
-    secrets:
-      - redis_host
-      - redis_port
-      - redis_db
-      - redis_username
-      - redis_password
+    volumes:
+      - ./.vault-local:/vault-bootstrap:ro
     depends_on:
       redis:
         condition: service_healthy
 
 volumes:
   redis_data:
+  vault_file:
 
 secrets:
   redis_host:
