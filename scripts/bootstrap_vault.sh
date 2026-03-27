@@ -73,13 +73,20 @@ is_sealed() {
 wait_for_vault() {
   echo "Жду Vault..."
   for _ in $(seq 1 60); do
-    if docker compose exec -T "$VAULT_CONTAINER" sh -lc "export VAULT_ADDR='$VAULT_ADDR'; vault status >/dev/null 2>&1" || true; then
+    rc=0
+    docker compose exec -T "$VAULT_CONTAINER" sh -lc \
+      "export VAULT_ADDR='$VAULT_ADDR'; vault status >/dev/null 2>&1" || rc=$?
+
+    if [ "$rc" -eq 0 ] || [ "$rc" -eq 2 ]; then
       echo "Vault отвечает"
       return 0
     fi
+
     sleep 2
   done
+
   echo "Vault не отвечает"
+  docker compose logs "$VAULT_CONTAINER" || true
   exit 1
 }
 
