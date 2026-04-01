@@ -57,7 +57,14 @@ jobs:
           REDIS_DB: ${{ secrets.REDIS_DB_INDEX }}
           REDIS_USERNAME: ${{ secrets.REDIS_APP_USERNAME }}
           REDIS_PASSWORD: ${{ secrets.REDIS_APP_PASSWORD }}
-        run: ./scripts/bootstrap_vault.sh
+        shell: bash
+        run: |
+          ./scripts/bootstrap_vault.sh
+          ROLE_ID="$(cat .vault-local/role_id)"
+          SECRET_ID="$(cat .vault-local/secret_id)"
+          echo "::add-mask::$ROLE_ID"
+          echo "::add-mask::$SECRET_ID"
+
 
       - name: Start web
         run: |

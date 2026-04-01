@@ -5,6 +5,7 @@ VAULT_ADDR="${VAULT_ADDR:-http://127.0.0.1:8200}"
 VAULT_CONTAINER="${VAULT_CONTAINER:-vault}"
 OUT_DIR="${OUT_DIR:-.vault-local}"
 POLICY_FILE="${POLICY_FILE:-vault/catdog-web-policy.hcl}"
+JSON_FIELD_SCRIPT="${JSON_FIELD_SCRIPT:-scripts/json_field.py}"
 
 REDIS_HOST="${REDIS_HOST:-redis}"
 REDIS_PORT="${REDIS_PORT:-6379}"
@@ -21,8 +22,23 @@ need_cmd() {
   }
 }
 
+need_file() {
+  local file_path="$1"
+  [[ -f "$file_path" ]] || {
+    echo "Не найден файл: $file_path"
+    exit 1
+  }
+}
+
 need_cmd docker
 need_cmd python3
+need_file "$JSON_FIELD_SCRIPT"
+
+json_field() {
+  local source="$1"
+  local expr="$2"
+  python3 "$JSON_FIELD_SCRIPT" "$source" "$expr"
+}
 
 vault_exec() {
   docker compose exec -T "$VAULT_CONTAINER" sh -lc "export VAULT_ADDR='$VAULT_ADDR'; $*"
@@ -32,24 +48,6 @@ status_json() {
   vault_exec "vault status -format=json" 2>/dev/null || true
 }
 
-python_json_field() {
-  local file="$1"
-  local expr="$2"
-  python3 - "$file" "$expr" <<'PY'
-import json, sys
-file_path = sys.argv[1]
-expr = sys.argv[2]
-data = json.load(open(file_path, "r", encoding="utf-8"))
-cur = data
-for part in expr.split("."):
-    if part.isdigit():
-        cur = cur[int(part)]
-    else:
-        cur = cur[part]
-print(cur)
-PY
-}
-
 is_initialized() {
   local raw
   raw="$(status_json)"
@@ -57,7 +55,7 @@ is_initialized() {
     echo "false"
     return
   fi
-  python3 -c 'import sys, json; print("true" if json.load(sys.stdin)["initialized"] else "false")' <<< "$raw"
+  printf '%s' "$raw" | json_field - initialized
 }
 
 is_sealed() {
@@ -67,7 +65,7 @@ is_sealed() {
     echo "true"
     return
   fi
-  python3 -c 'import sys, json; print("true" if json.load(sys.stdin)["sealed"] else "false")' <<< "$raw"
+  printf '%s' "$raw" | json_field - sealed
 }
 
 wait_for_vault() {
@@ -77,7 +75,7 @@ wait_for_vault() {
     docker compose exec -T "$VAULT_CONTAINER" sh -lc \
       "export VAULT_ADDR='$VAULT_ADDR'; vault status >/dev/null 2>&1" || rc=$?
 
-    if [ "$rc" -eq 0 ] || [ "$rc" -eq 2 ]; then
+    if [[ "$rc" -eq 0 || "$rc" -eq 2 ]]; then
       echo "Vault отвечает"
       return 0
     fi
@@ -112,7 +110,7 @@ unseal_if_needed() {
 
     echo "Vault sealed. Выполняю unseal..."
     for i in 0 1 2; do
-      key="$(python_json_field "$OUT_DIR/init.json" "unseal_keys_b64.$i")"
+      key="$(json_field "$OUT_DIR/init.json" "unseal_keys_b64.$i")"
       vault_exec "vault operator unseal '$key' >/dev/null"
     done
     echo "Unseal завершен"
@@ -128,7 +126,7 @@ get_root_token() {
   fi
 
   if [[ -f "$OUT_DIR/init.json" ]]; then
-    python_json_field "$OUT_DIR/init.json" "root_token"
+    json_field "$OUT_DIR/init.json" "root_token"
     return
   fi
 
